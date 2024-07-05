@@ -1,0 +1,457 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Creates a vpc, 6 subnets (2 public, 4 private), an internet gateway, 2 nat gateways, 3 route tables & 4 security groups'
+Metadata:
+  AWS::CloudFormation::Interface: 
+    ParameterGroups:
+      - 
+        Label: 
+          default: "VPC CIDR"
+        Parameters: 
+          - VpcCIDR
+      - 
+        Label: 
+          default: "Subnet CIDR"
+        Parameters:
+          - PublicSubnet1CIDR
+          - PublicSubnet2CIDR
+          - PrivateSubnet1CIDR
+          - PrivateSubnet2CIDR
+          - PrivateSubnet3CIDR
+          - PrivateSubnet4CIDR
+      - 
+        Label: 
+          default: "Direct access CIDR"
+        Parameters: 
+          - AllowedIpsSG
+      - 
+        Label: 
+          default: "Ports"
+        Parameters: 
+          - WebContainerPort
+          - ApiContainerPort
+          - DbPort
+          - LoadBalancerPort
+
+Parameters:
+  VpcCIDR:
+    Default: 100.0.0.0/16
+    Description: "Please enter the IP range for this VPC (CIDR notation)"
+    Type: String
+
+  PublicSubnet1CIDR:
+    Default: 100.0.0.0/20
+    Description: "Please enter the IP range for Public Subnet 1 | Web Tier (CIDR notation)"
+    Type: String
+
+  PublicSubnet2CIDR:
+    Default: 100.0.16.0/20
+    Description: "Please enter the IP range for Public Subnet 2 | Web Tier (CIDR notation)"
+    Type: String
+  
+  PrivateSubnet1CIDR:
+    Default: 100.0.32.0/20
+    Description: "Please enter the IP range for Private Subnet 1 | Api Tier (CIDR notation)"
+    Type: String
+
+  PrivateSubnet2CIDR:
+    Default: 100.0.48.0/20
+    Description: "Please enter the IP range for Private Subnet 2 | Api Tier (CIDR notation)"
+    Type: String
+
+  PrivateSubnet3CIDR:
+    Default: 100.0.64.0/20
+    Description: "Please enter the IP range for Private Subnet 3 | Database Tier (CIDR notation)"
+    Type: String
+
+  PrivateSubnet4CIDR:
+    Default: 100.0.80.0/20
+    Description: "Please enter the IP range for Private Subnet 3 | Database Tier (CIDR notation)"
+    Type: String
+
+  AllowedIpsSG:
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+    Default: 0.0.0.0/0
+    Description: The IP address range that can be used to access the web UI directly (without ALB for testing).
+    MaxLength: '18'
+    MinLength: '9'
+    Type: String
+
+  WebContainerPort:
+    Type: Number
+    Description: "Please enter container port for web"
+    Default: 3000
+
+  ApiContainerPort:
+    Type: Number
+    Description: "Please enter container port for web"
+    Default: 3001
+
+  DbPort:
+    Type: Number
+    Description: "Please enter mysql database port"
+    Default: 3306
+
+  LoadBalancerPort:
+    Type: Number
+    Description: "Please enter load balancer external port"
+    Default: 80
+
+Resources:
+  MyVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: my-vpc
+
+  PublicSubnetWebAZ1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref PublicSubnet1CIDR
+      VpcId: !GetAtt MyVpc.VpcId
+      Tags:
+        - Key: Name
+          Value: public-subnet-web-az-1
+
+  PublicSubnetWebAZ2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Ref PublicSubnet2CIDR
+      VpcId: !GetAtt MyVpc.VpcId
+      Tags:
+        - Key: Name
+          Value: public-subnet-web-az-2
+
+  PrivateSubnetApiAZ1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref PrivateSubnet1CIDR
+      VpcId: !GetAtt MyVpc.VpcId
+      Tags:
+        - Key: Name
+          Value: private-subnet-api-az-1
+
+  PrivateSubnetApiAZ2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Ref PrivateSubnet2CIDR
+      VpcId: !GetAtt MyVpc.VpcId
+      Tags:
+        - Key: Name
+          Value: private-subnet-api-az-2
+
+  PrivateSubnetDatabaseAZ1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref PrivateSubnet3CIDR
+      VpcId: !GetAtt MyVpc.VpcId
+      Tags:
+        - Key: Name
+          Value: private-subnet-database-az-1
+          
+  PrivateSubnetDatabaseAZ2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      CidrBlock: !Ref PrivateSubnet4CIDR
+      VpcId: !GetAtt MyVpc.VpcId
+      Tags:
+        - Key: Name
+          Value: private-subnet-database-az-2
+  
+  MyInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags: 
+        - Key: Name
+          Value: igw
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !GetAtt MyInternetGateway.InternetGatewayId
+      VpcId: !GetAtt MyVpc.VpcId
+
+  PublicSubnetRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags: 
+        - Key: Name
+          Value: public-subnet-route-table
+      VpcId: !GetAtt MyVpc.VpcId
+
+  PublicSubnetRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !GetAtt MyInternetGateway.InternetGatewayId
+      RouteTableId: !GetAtt PublicSubnetRouteTable.RouteTableId
+
+  PublicSubnetRouteTableAssociationAZ1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !GetAtt PublicSubnetRouteTable.RouteTableId
+      SubnetId: !GetAtt PublicSubnetWebAZ1.SubnetId
+
+  PublicSubnetRouteTableAssociationAZ2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !GetAtt PublicSubnetRouteTable.RouteTableId
+      SubnetId: !GetAtt PublicSubnetWebAZ2.SubnetId
+
+  ElasticIpAZ1:
+    Type: AWS::EC2::EIP
+    DependsOn: MyVpc
+    Properties:
+      Domain: vpc
+      NetworkBorderGroup: us-east-1
+      Tags: 
+        - Key: Name
+          Value: eip-az-1
+
+  NATGatewayAZ1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIpAZ1.AllocationId
+      ConnectivityType: public
+      SubnetId: !GetAtt PublicSubnetWebAZ1.SubnetId
+      Tags: 
+        - Key: Name
+          Value: nat-gateway-az-1
+
+  PrivateSubnetRouteTableAZ1:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags: 
+        - Key: Name
+          Value: private-subnet-route-table-az-1
+      VpcId: !GetAtt MyVpc.VpcId
+
+  PrivateSubnetRouteAZ1:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !GetAtt NATGatewayAZ1.NatGatewayId
+      RouteTableId: !GetAtt PrivateSubnetRouteTableAZ1.RouteTableId
+
+  PrivateSubnetApiRouteTableAssociationAZ1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !GetAtt PrivateSubnetRouteTableAZ1.RouteTableId
+      SubnetId: !GetAtt PrivateSubnetApiAZ1.SubnetId
+
+  PrivateSubnetDatabaseRouteTableAssociationAZ1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !GetAtt PrivateSubnetRouteTableAZ1.RouteTableId
+      SubnetId: !GetAtt PrivateSubnetDatabaseAZ1.SubnetId
+
+  ElasticIpAZ2:
+    Type: AWS::EC2::EIP
+    DependsOn: MyVpc
+    Properties:
+      Domain: vpc
+      NetworkBorderGroup: us-east-1
+      Tags: 
+        - Key: Name
+          Value: eip-az-2
+
+  NATGatewayAZ2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIpAZ2.AllocationId
+      ConnectivityType: public
+      SubnetId: !GetAtt PublicSubnetWebAZ2.SubnetId
+      Tags: 
+        - Key: Name
+          Value: nat-gateway-az-2
+
+  PrivateSubnetRouteTableAZ2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      Tags: 
+        - Key: Name
+          Value: private-subnet-route-table-az-2
+      VpcId: !GetAtt MyVpc.VpcId
+
+  PrivateSubnetRouteAZ2:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !GetAtt NATGatewayAZ2.NatGatewayId
+      RouteTableId: !GetAtt PrivateSubnetRouteTableAZ2.RouteTableId
+
+  PrivateSubnetRouteTableAssociationAZ2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !GetAtt PrivateSubnetRouteTableAZ2.RouteTableId
+      SubnetId: !GetAtt PrivateSubnetApiAZ2.SubnetId
+
+  PrivateSubnetDatabaseRouteTableAssociationAZ2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !GetAtt PrivateSubnetRouteTableAZ1.RouteTableId
+      SubnetId: !GetAtt PrivateSubnetDatabaseAZ2.SubnetId
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for internet facing ALB"
+      GroupName: internet-facing-sg-alb
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: !Ref LoadBalancerPort
+          ToPort: !Ref LoadBalancerPort
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: ALB Security Group
+      VpcId: !GetAtt MyVpc.VpcId
+
+  WebServiceSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for web service"
+      GroupName: web-service-sg
+      SecurityGroupIngress: 
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref AllowedIpsSG
+        - IpProtocol: tcp
+          FromPort: !Ref WebContainerPort
+          ToPort: !Ref WebContainerPort
+          SourceSecurityGroupId: !GetAtt ALBSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: Web server Security Group
+      VpcId: !GetAtt MyVpc.VpcId
+
+  APIServiceSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for api service"
+      GroupName: api-service-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref ApiContainerPort
+          ToPort: !Ref ApiContainerPort
+          SourceSecurityGroupId: !GetAtt ALBSecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: Api Server Security Group
+      VpcId: !GetAtt MyVpc.VpcId
+
+  DatabaseSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group for RDS Database"
+      GroupName: database-sg
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref DbPort
+          ToPort: !Ref DbPort
+          SourceSecurityGroupId: !GetAtt APIServiceSG.GroupId
+      Tags:
+        - Key: Name
+          Value: Database Security Group
+      VpcId: !GetAtt MyVpc.VpcId
+
+Outputs:
+  VPC:
+    Description: VPC ID
+    Export:
+      Name: !Sub ${AWS::StackName}-VPC
+    Value: !GetAtt MyVpc.VpcId
+
+  PublicSubnetWebAZ1:
+    Description: Public Subnet 1 ID (in AZ1 for web)
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSubnetWebAZ1
+    Value: !Ref PublicSubnetWebAZ1
+
+  PublicSubnetWebAZ2:
+    Description: Public Subnet 2 ID (in AZ2 for web)
+    Export:
+      Name: !Sub ${AWS::StackName}-PublicSubnetWebAZ2
+    Value: !Ref PublicSubnetWebAZ2
+
+  PrivateSubnetApiAZ1:
+    Description: Private Subnet 1 ID (in AZ1 for api)
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnetApiAZ1
+    Value: !Ref PrivateSubnetApiAZ1
+
+  PrivateSubnetApiAZ2:
+    Description: Private Subnet 2 ID (in AZ2 for api)
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnetApiAZ2
+    Value: !Ref PrivateSubnetApiAZ2
+
+  PrivateSubnetDatabaseAZ1:
+    Description: Private Subnet 3 ID (in AZ1 for database)
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnetDatabaseAZ1
+    Value: !Ref PrivateSubnetDatabaseAZ1
+
+  PrivateSubnetDatabaseAZ2:
+    Description: Private Subnet 4 ID (in AZ2 for database)
+    Export:
+      Name: !Sub ${AWS::StackName}-PrivateSubnetDatabaseAZ2
+    Value: !Ref PrivateSubnetDatabaseAZ2
+
+  ALBSecurityGroup:
+    Description: Application Load Balancer Security Group ID
+    Export:
+      Name: !Sub ${AWS::StackName}-ALBSecurityGroup
+    Value: !Ref ALBSecurityGroup
+
+  WebServiceSG:
+    Description: Web server container Security Group ID
+    Export:
+      Name: !Sub ${AWS::StackName}-WebServiceSG
+    Value: !Ref WebServiceSG
+
+  APIServiceSG:
+    Description: Api server container Security Group ID
+    Export:
+      Name: !Sub ${AWS::StackName}-ApiServerSecurityGroup
+    Value: !Ref APIServiceSG
+
+  DatabaseSG:
+    Description: DataBase Security Group ID
+    Export:
+      Name: !Sub ${AWS::StackName}-DatabaseSecurityGroup
+    Value: !Ref DatabaseSG
+
+  WebContainerPort:
+    Description: Web container port
+    Export:
+      Name: !Sub ${AWS::StackName}-WebContainerPort
+    Value: !Ref WebContainerPort
+
+  ApiContainerPort:
+    Description: API container port
+    Export:
+      Name: !Sub ${AWS::StackName}-ApiContainerPort
+    Value: !Ref ApiContainerPort
+
+  DbPort:
+    Description: DataBase port
+    Export:
+      Name: !Sub ${AWS::StackName}-DbPort
+    Value: !Ref DbPort
+
+  LoadBalancerPort:
+    Description: ALB port
+    Export:
+      Name: !Sub ${AWS::StackName}-LoadBalancerPort
+    Value: !Ref LoadBalancerPort

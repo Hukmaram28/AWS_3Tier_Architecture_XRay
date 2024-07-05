@@ -1,0 +1,254 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Creates an ecs execution role, task role, ecs task definition for web microservice, auto scaling policy, an ecs service for web service, log group for cloudWatch logs, a new listener rule for existing load balancer etc."
+
+Metadata:
+  AWS::CloudFormation::Interface: 
+    ParameterGroups:
+      - 
+        Label: 
+          default: "Parent Stack Names"
+        Parameters: 
+          - VpcStackName
+          - ApiStackName
+          - RdsStackName
+      - 
+        Label: 
+          default: "Web Service Parameters"
+        Parameters: 
+          - WebServiceName
+          - WebImage
+          - WebContainerName
+          - WebHealthCheckPath
+          - WebMinContainers
+          - WebMaxContainers
+          - WebAutoScalingTargetValue
+
+Parameters:
+  VpcStackName:
+    Default: vpc
+    Description: "Please enter parent vpc stack name"
+    Type: String
+
+  ApiStackName:
+    Default: api
+    Description: "Please enter api stack name"
+    Type: String
+
+  RdsStackName:
+    Default: rds
+    Description: "Please enter rds stack name"
+    Type: String
+
+  WebServiceName:
+    Type: String
+    Description: "Please enter service name for web ui"
+    Default: WebService
+
+  WebImage:
+    Type: String
+    Default: 211125556960.dkr.ecr.us-east-1.amazonaws.com/crypteye-web-dev:840ddcd
+
+  WebContainerName:
+    Type: String
+    Default: crypteye-web
+
+  WebHealthCheckPath:
+    Type: String
+    Default: /
+
+  WebMinContainers:
+    Type: Number
+    Default: 2
+
+  WebMaxContainers:
+    Type: Number
+    Default: 10
+
+  WebAutoScalingTargetValue:
+    Type: Number
+    Default: 70
+
+Resources:
+  #A role needed for ECS
+  WebExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ["", [!Ref WebServiceName, WebExecutionRole]]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+
+  #A role for the containers
+  WebTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ["", [!Ref WebServiceName, WebTaskRole]]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: "sts:AssumeRole"
+
+  # A role for ecs auto scaling
+  WebAutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ["", [!Ref WebServiceName, WebAutoScalingRole]]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole"
+
+  #Task definition for web service
+  WebTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn: LogGroup
+    Properties:
+      Family: web-taskdefinition
+      NetworkMode: awsvpc # awsvpc for Fargate
+      Cpu: 256
+      Memory: 0.5GB
+      ExecutionRoleArn: !Ref WebExecutionRole
+      TaskRoleArn: !Ref WebTaskRole
+      RequiresCompatibilities:
+        - FARGATE
+      ContainerDefinitions:
+        - Name:
+            !Join
+              - "-"
+              - - !Ref WebContainerName
+                - Fn::ImportValue: !Sub ${RdsStackName}-EnvironmentName
+          Image: !Ref WebImage
+          PortMappings:
+            - ContainerPort:
+                Fn::ImportValue: !Sub ${VpcStackName}-WebContainerPort
+              Protocol: HTTP
+          Environment:
+            - Name: ALB
+              Value:
+                Fn::ImportValue: !Sub ${ApiStackName}-LoadBalancerUrl
+          #cloudwatch logs
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref AWS::Region
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ["", [/ecs/, !Ref WebServiceName, WebTaskDefinition]]
+
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - ListenerHTTPRule
+    Properties:
+      ServiceName: !Ref WebServiceName
+      Cluster: 
+        Fn::ImportValue: !Sub ${ApiStackName}-Cluster
+      TaskDefinition: !Ref WebTaskDefinition
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 100
+        MaximumPercent: 200
+      DesiredCount: 2
+      HealthCheckGracePeriodSeconds: 30
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets:
+            - Fn::ImportValue: !Sub ${VpcStackName}-PublicSubnetWebAZ1
+            - Fn::ImportValue: !Sub ${VpcStackName}-PublicSubnetWebAZ2
+          SecurityGroups:
+            - Fn::ImportValue: !Sub ${VpcStackName}-WebServiceSG
+      LoadBalancers:
+        - ContainerName:
+            !Join
+              - "-"
+              - - !Ref WebContainerName
+                - Fn::ImportValue: !Sub ${RdsStackName}-EnvironmentName
+          ContainerPort:
+            Fn::ImportValue: !Sub ${VpcStackName}-WebContainerPort
+          TargetGroupArn: !Ref TargetGroup
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: !Ref WebHealthCheckPath
+      HealthCheckTimeoutSeconds: 5
+      UnhealthyThresholdCount: 2
+      HealthyThresholdCount: 2
+      Name: !Join ["", [!Ref WebServiceName, TargetGroup]]
+      Port:
+        Fn::ImportValue: !Sub ${VpcStackName}-WebContainerPort
+      Protocol: HTTP
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 60
+      TargetType: ip
+      VpcId:
+        Fn::ImportValue: !Sub ${VpcStackName}-VPC
+
+  ListenerHTTPRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions: 
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+      Conditions: 
+        - Field: path-pattern
+          Values:
+            - "*"
+      ListenerArn: 
+        Fn::ImportValue: !Sub ${ApiStackName}-ListenerHTTP
+      Priority: 3
+
+  AutoScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MinCapacity: !Ref WebMinContainers
+      MaxCapacity: !Ref WebMaxContainers
+      ResourceId: 
+        !Join
+          - "/"
+          - - "service"
+            - Fn::ImportValue: !Sub ${ApiStackName}-Cluster
+            - !GetAtt Service.Name
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+      RoleARN: !GetAtt WebAutoScalingRole.Arn
+
+  AutoScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Join ["", [!Ref WebServiceName, AutoScalingPolicy]]
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref AutoScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        ScaleInCooldown: 10
+        ScaleOutCooldown: 10
+        TargetValue: !Ref WebAutoScalingTargetValue
+
+Outputs:
+  Endpoint:
+    Description: Endpoint
+    Value:
+      !Join
+        - ""
+        - - "http://"
+          - Fn::ImportValue: !Sub ${ApiStackName}-LoadBalancerUrl

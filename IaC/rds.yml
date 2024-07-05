@@ -1,0 +1,203 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Creates a RDS DB instance from a db snapshot, database subnet group, store db details to parameter store and secrets manager.
+Metadata:
+  AWS::CloudFormation::Interface: 
+    ParameterGroups:
+      - 
+        Label: 
+          default: VPC Name
+        Parameters:
+          - VpcStackName
+      - 
+        Label: 
+          default: Environment Name
+        Parameters:
+          - Environment
+      - 
+        Label: 
+          default: Database Parameters
+        Parameters:
+          - DatabaseInstanceIdentifier
+          - DatabaseSnapshotIdentifier
+          - DatabaseInstanceClass
+          - MultiAZDatabase
+          - DBName
+          - DBMasterUser
+          - DBPort
+          - DBPassword
+
+Parameters:
+  VpcStackName:
+    Description: "VPC stack Name"
+    Default: vpc
+    Type: String
+
+  DatabaseInstanceIdentifier:
+    # AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: Must begin with a letter and contain only alphanumeric characters
+    Default: database-crypteye
+    Description: Instance identifier name
+    MaxLength: 60
+    MinLength: 1
+    Type: String
+
+  DatabaseSnapshotIdentifier:
+    Description: ARN of the DB snapshot
+    Default: arn:aws:rds:us-east-1:211125556960:snapshot:crypteye-snapshot
+    Type: String
+
+  DatabaseInstanceClass:
+    AllowedValues:
+      - db.t1.micro
+      - db.t2.micro
+      - db.m1.small
+      - db.m1.medium
+      - db.m1.large
+      - db.t3.micro
+    ConstraintDescription: Must select a valid database instance type
+    Default: db.t3.micro
+    Description: The database instance type
+    Type: String
+
+  MultiAZDatabase:
+    AllowedValues:
+      - true
+      - false
+    ConstraintDescription: Must be either true or false
+    Default: false
+    Description: Create a Multi-AZ MySQL Amazon RDS database instance
+    Type: String
+
+  DBName: 
+    Default: crypteye
+    Description: enter db name which will be stored in parameter store
+    Type: String
+
+  DBMasterUser: 
+    Default: admin
+    Description: master user of the db to be stored in secrets manager
+    Type: String
+
+  DBPort: 
+    Default: 3306
+    Description: db port to be stored in parameter store
+    Type: Number
+
+  DBPassword: 
+    NoEcho: true
+    Description: database password to be stored in secrets manager
+    Type: String
+    MinLength: 1
+    MaxLength: 41
+    AllowedPattern: ^[a-zA-Z0-9]*$
+
+  Environment:
+    AllowedValues:
+      - dev
+      - it
+      - prod
+    ConstraintDescription: Must select a valid env
+    Default: dev
+    Description: The database environment
+    Type: String
+
+Resources:   
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnet group for RDS database
+      SubnetIds: 
+        - 
+          Fn::ImportValue: !Sub ${VpcStackName}-PrivateSubnetDatabaseAZ1
+        - 
+          Fn::ImportValue: !Sub ${VpcStackName}-PrivateSubnetDatabaseAZ2
+      Tags:
+        - Key: Name
+          Value: database subnets
+
+  DatabaseInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      # AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      DBInstanceClass: !Ref DatabaseInstanceClass
+      DBInstanceIdentifier: !Ref DatabaseInstanceIdentifier
+      DBSnapshotIdentifier: !Ref DatabaseSnapshotIdentifier
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      Engine: MySQL
+      MultiAZ: !Ref MultiAZDatabase
+      VPCSecurityGroups:
+        - 
+          Fn::ImportValue: !Sub ${VpcStackName}-DatabaseSecurityGroup
+
+  ParameterStoreDBUrl:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: DB Url
+      Name: !Sub /database/${Environment}/db_url
+      Type: String
+      Value: !GetAtt DatabaseInstance.Endpoint.Address
+
+  ParameterStoreDBPort:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: DB port
+      Name: !Sub /database/${Environment}/db_port
+      Type: String
+      Value: !Ref DBPort
+
+  ParameterStoreDBName:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Description: DB Name
+      Name: !Sub /database/${Environment}/db_name
+      Type: String
+      Value: !Ref DBName
+
+  SecretsManagerDB:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: DB Secret
+      Name: database
+      SecretString: !Sub |
+        {
+          "username": "${DBMasterUser}",
+          "password": "${DBPassword}"
+        }
+
+  SecretRdsAttachment:
+    Type: AWS::SecretsManager::SecretTargetAttachment
+    Properties:
+      SecretId: !Ref SecretsManagerDB
+      TargetId: !Ref DatabaseInstance
+      TargetType: AWS::RDS::DBInstance
+
+Outputs:
+  EnvironmentName:
+    Description: "Environment Name for cluster name"
+    Value: !Ref Environment
+    Export:
+      Name: !Sub "${AWS::StackName}-EnvironmentName"
+
+  ParameterStoreDBUrl:
+    Description: "DatabaseInstance Url SMM Parameter"
+    Value: !Ref ParameterStoreDBUrl
+    Export:
+      Name: !Sub "${AWS::StackName}-ParameterStoreDBUrl"
+
+  ParameterStoreDBPort:
+    Description: "DatabaseInstance port SMM Parameter"
+    Value: !Ref ParameterStoreDBPort
+    Export:
+      Name: !Sub "${AWS::StackName}-ParameterStoreDBPort"
+
+  ParameterStoreDBName:
+    Description: "DatabaseInstance db name SMM Parameter"
+    Value: !Ref ParameterStoreDBName
+    Export:
+      Name: !Sub "${AWS::StackName}-ParameterStoreDBName"
+
+  SecretsManagerDB:
+    Description: "DatabaseInstance username password secret manager"
+    Value: !Ref SecretsManagerDB
+    Export:
+      Name: !Sub "${AWS::StackName}-SecretsManagerDB"
