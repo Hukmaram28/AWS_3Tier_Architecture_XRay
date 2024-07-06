@@ -30,12 +30,18 @@ Additionally, we will configure 4 security groups:
 
 The YAML file for this configuration is located in the `Iac` folder under the name `network.yml`.
 
+![VPC Diagram](/images/vpc_arch.png)
+
+![VPC Stack](/images/vpc_stack.png)
+
 ## Step 1: Database Setup
 
 We will create a Multi-AZ RDS MySQL DB instance using a DB snapshot, which I previously created from the production database. We will need the ARN of the snapshot. For the database subnet group, we will use the two private DB subnets created in the previous stack. 
 The DB instance DNS name, DB port, and database name will be stored in the System Manager Parameter Store, while the database master username and password will be stored in Secrets Manager. These variables will be injected into the ECS containers at runtime.
 
 The YAML file for this configuration is located in the `Iac` folder under the name `rds.yml`.
+
+![RDS Stack](/images/rds_stack.png)
 
 ## Step 2: ECS Cluster and App Server Setup
 
@@ -70,12 +76,14 @@ Before executing this stack, make sure to push the app server docker image to aw
 
 The YAML file for this configuration is located in the `Iac` folder under the name `api_fargate.yml`.
 
+![App Stack](/images/app_stack.png)
+
 ## Step 3: Web Application Setup
 
 This step is similar to what we did in the previous stack. We will:
 
 - Create an ECS Fargate task definition for the web application
-- Create a service to deploy the web application into the 2 public subnets
+- Create an ECS service to deploy the web application into the 2 public subnets
 - Add a listener rule with the wildcard path `*` to the ALB to forward traffic to the web application
 
 Note: The listener rule will have a lower priority than the rule created for the app server with the path pattern `/api/*`, ensuring that API calls are forwarded to the app servers while the remaining traffic is directed to the web application.
@@ -92,6 +100,9 @@ These components have been deployed into a 3-tier architecture in AWS.
 We can now access the web application by visiting the load balancer's DNS name in the browser.
 
 If you encounter any problems accessing API endpoints or the database, make sure you have properly configured the environment variables in the app and web task definitions. You can make use of cloudWatch log groups which we setup in the task definition to look for application container logs.
+
+![Web Stack](/images/web_stack.png)
+![CloudWatch Logs](/images/cloudwatch_logs.png)
 
 ## Step 4: CI/CD Pipeline Setup
 
@@ -111,5 +122,8 @@ Once the setup is complete, the source code will be built and deployed to ECS as
 
 You can also write a CloudFormation template for the above CodePipeline pipelines to create the pipeline with just a few clicks using CloudFormation.
 
+![CodeCommit](/images/codeCommit.png)
+![CodeBuild](/images/codeBuild.png)
+![CodePipeline](/images/codePipeline.png)
 
 ## Step-5: Observability using X-Ray
