@@ -1,3 +1,4 @@
 crypteye-api
 crypteye-web
 .env
+.DS_Store
