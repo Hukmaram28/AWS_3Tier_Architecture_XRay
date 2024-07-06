@@ -77,6 +77,7 @@ Before executing this stack, make sure to push the app server docker image to aw
 The YAML file for this configuration is located in the `Iac` folder under the name `api_fargate.yml`.
 
 ![App Stack](/images/app_stack.png)
+![Api Service](/images/api_service.png)
 
 ## Step 3: Web Application Setup
 
@@ -103,6 +104,7 @@ If you encounter any problems accessing API endpoints or the database, make sure
 
 ![Web Stack](/images/web_stack.png)
 ![CloudWatch Logs](/images/cloudwatch_logs.png)
+![Web Service](/images/web_service.png)
 
 ## Step 4: CI/CD Pipeline Setup
 
