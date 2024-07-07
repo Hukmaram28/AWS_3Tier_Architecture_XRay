@@ -83,7 +83,7 @@ The YAML file for this configuration is located in the `Iac` folder under the na
 
 This step is similar to what we did in the previous stack. We will:
 
-- Create an ECS Fargate task definition for the web application
+- Create an ECS Fargate task definition for the web application, add environment variables to provide the load balancer DNS names so web can access the api.
 - Create an ECS service to deploy the web application into the 2 public subnets
 - Add a listener rule with the wildcard path `*` to the ALB to forward traffic to the web application
 
@@ -134,9 +134,9 @@ To enable X-Ray tracing and reporting, we first need to instrument our source co
 
 Our backend is a TypeScript-TypeORM application with a MySQL database. We need to install the `aws-xray-sdk` npm package and instrument the code accordingly. Sample examples for nodejs provided by AWS can be found [here](https://github.com/aws-samples/aws-xray-sdk-node-sample/blob/master/index.js). Although we can trace our backend database calls, there is no official support provided by the X-Ray SDK for TypeORM thus far. Therefore, I was unable to instrument DB calls, but this can be done using other open-source observability tools like OpenTelemetry.
 
-Our front end is a React.js single-page application, which means the page metadata is not dynamically updated when a user navigates to different pages. To solve this issue and provide better SEO, I used server-side rendering to update web metadata dynamically, allowing me to instrument the X-Ray code on the web server side as well. This can be seen in the X-Ray tracing map.
+Our front end is a React.js single-page application, which means the page metadata is not dynamically updated when a user navigates to different components. To solve this issue and provide better SEO, I used server-side rendering to update web metadata dynamically, which allowed me to instrument the X-Ray code on the web server side as well. This can be seen in the X-Ray tracing map.
 
-Once the code is instrumented, we need to update our web and API CloudFormation templates to include a sidecar container along with essential containers for the X-Ray daemon to collect tracing data and report to the X-Ray API. By default the X-Ray daemon uses port 2000 UDP for the collection of traces from x-ray-sdk.
+Once the code is instrumented, we need to update our web and API CloudFormation templates to include a sidecar container along with essential web and api containers for the X-Ray daemon to collect tracing data and report to the X-Ray API. By default the X-Ray daemon uses port 2000 UDP for the collection of traces from x-ray-sdk.
 
 To do this, make the following changes in `api_fargate.yml` and `web_fargate.yml` template files:
 - Add the X-Ray daemon container to the task definition. We can use the official image provided by AWS.
