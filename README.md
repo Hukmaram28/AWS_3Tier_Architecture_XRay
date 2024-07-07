@@ -139,9 +139,9 @@ Our front end is a React.js single-page application, which means the page metada
 Once the code is instrumented, we need to update our web and API CloudFormation templates to include a sidecar container along with essential containers for the X-Ray daemon to collect tracing data and report to the X-Ray API. By default the X-Ray daemon uses port 2000 UDP for the collection of traces from x-ray-sdk.
 
 To do this, make the following changes in `api_fargate.yml` and `web_fargate.yml` template files:
-- Add the X-Ray container to the task definition provided by AWS.
-- Add a log group to check X-Ray container logs in CloudWatch.
-- Update the task role and add the following `managedPolicyArn` to allow the daemon container to report tracing data to the X-Ray API.
+- Add the X-Ray daemon container to the task definition. We can use the official image provided by AWS.
+- Add a log group to store X-Ray container logs in CloudWatch.
+- Update the container task role and add the following `managedPolicyArn` to allow the daemon container to report tracing data to the X-Ray API.
 
 Once these changes are made, update the web and API stacks using cloudformation and deploy the latest source code with X-Ray instrumentation using codePipeline. You will be able to see the tracing data in AWS X-Ray and visualize the data using the X-Ray tracing map.
 
