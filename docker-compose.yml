@@ -1,16 +1,18 @@
+# docker-compose is not used in this project, so you can ignore this file.
+
 version: "3.8"
 services:
   web:
     depends_on:
       - api
-    build: ./crypteye-web
+    build: ./web
     restart: unless-stopped
     ports:
       - 3000:3000
   api:
     depends_on:
       - db
-    build: ./crypteye-api
+    build: ./api
     restart: unless-stopped
     ports:
       - 3001:3001

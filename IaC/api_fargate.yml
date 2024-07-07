@@ -116,6 +116,8 @@ Resources:
             Principal:
               Service: ecs-tasks.amazonaws.com
             Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess'
 
   #A role needed for ECS
   ApiAutoScalingRole:
@@ -184,6 +186,20 @@ Resources:
             Options:
               awslogs-region: !Ref AWS::Region
               awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+        - Name: x-ray
+          Essential: false
+          Image: amazon/aws-xray-daemon:latest
+          cpu: 32
+          Memory: 256
+          PortMappings:
+            - ContainerPort: 2000
+              Protocol: udp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref AWS::Region
+              awslogs-group: !Ref LogGroupXrayApi
               awslogs-stream-prefix: ecs
   Service:
     Type: AWS::ECS::Service
@@ -279,6 +295,10 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Join ["", [/ecs/, !Ref ApiServiceName, ApiTaskDefinition]]
+  LogGroupXrayApi:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ["", [/ecs/, !Ref ApiServiceName, Xray]]
   AutoScalingTarget:
     Type: AWS::ApplicationAutoScaling::ScalableTarget
     Properties:

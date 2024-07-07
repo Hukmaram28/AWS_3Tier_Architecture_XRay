@@ -94,6 +94,8 @@ Resources:
             Principal:
               Service: ecs-tasks.amazonaws.com
             Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess'
 
   # A role for ecs auto scaling
   WebAutoScalingRole:
@@ -144,11 +146,30 @@ Resources:
               awslogs-region: !Ref AWS::Region
               awslogs-group: !Ref LogGroup
               awslogs-stream-prefix: ecs
+        - Name: x-ray
+          Essential: false
+          Image: amazon/aws-xray-daemon:latest
+          cpu: 32
+          Memory: 256
+          PortMappings:
+            - ContainerPort: 2000
+              Protocol: udp
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref AWS::Region
+              awslogs-group: !Ref LogGroupXrayWeb
+              awslogs-stream-prefix: ecs
 
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Join ["", [/ecs/, !Ref WebServiceName, WebTaskDefinition]]
+
+  LogGroupXrayWeb:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ["", [/ecs/, !Ref WebServiceName, Xray]]
 
   Service:
     Type: AWS::ECS::Service
