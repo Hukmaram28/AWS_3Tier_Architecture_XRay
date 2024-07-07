@@ -128,4 +128,23 @@ You can also write a CloudFormation template for the above CodePipeline pipeline
 ![CodeBuild](/images/codeBuild.png)
 ![CodePipeline](/images/codePipeline.png)
 
-## Step-5: Observability using X-Ray
+## Step 5: Observability using X-Ray
+
+To enable X-Ray tracing and reporting, we first need to instrument our source code with X-Ray. AWS provides different X-Ray SDKs for different languages. Please refer to the documentation [here](https://docs.aws.amazon.com/xray/latest/devguide/aws-xray.html).
+
+Our backend is a TypeScript-TypeORM application with a MySQL database. We need to install the `aws-xray-sdk` npm package and instrument the code accordingly. Sample examples for nodejs provided by AWS can be found [here](https://github.com/aws-samples/aws-xray-sdk-node-sample/blob/master/index.js). Although we can trace our backend database calls, there is no official support provided by the X-Ray SDK for TypeORM thus far. Therefore, I was unable to instrument DB calls, but this can be done using other open-source observability tools like OpenTelemetry.
+
+Our front end is a React.js single-page application, which means the page metadata is not dynamically updated when a user navigates to different pages. To solve this issue and provide better SEO, I used server-side rendering to update web metadata dynamically, allowing me to instrument the X-Ray code on the web server side as well. This can be seen in the X-Ray tracing map.
+
+Once the code is instrumented, we need to update our web and API CloudFormation templates to include a sidecar container along with essential containers for the X-Ray daemon to collect tracing data and report to the X-Ray API. By default the X-Ray daemon uses port 2000 UDP for the collection of traces from x-ray-sdk.
+
+To do this, make the following changes in `api_fargate.yml` and `web_fargate.yml` template files:
+- Add the X-Ray container to the task definition provided by AWS.
+- Add a log group to check X-Ray container logs in CloudWatch.
+- Update the task role and add the following `managedPolicyArn` to allow the daemon container to report tracing data to the X-Ray API.
+
+Once these changes are made, update the web and API stacks using cloudformation and deploy the latest source code with X-Ray instrumentation using codePipeline. You will be able to see the tracing data in AWS X-Ray and visualize the data using the X-Ray tracing map.
+
+![X-Ray Trace Map](/images/x-ray-trace-map.png)
+![X-Ray traces records](/images/x-ray-trace-record.png)
+![X-Ray traces](/images/x-ray-traces.png)
