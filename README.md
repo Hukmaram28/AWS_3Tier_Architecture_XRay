@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project provides a high level walkthrough of creating a 3-tier web architecture in aws cloud for a distributed microservices architechture, Setting up a CI/CD pipeline for web and app server builds and deployments to ECS Fargate, and demonstrating observability by instrumenting AWS X-ray. We will be use CloudFormation YAML templates to create the infrastructure. 
+This project provides a high level walkthrough of creating a 3-tier web architecture in aws cloud for a distributed microservices architechture, Setting up a CI/CD pipeline for web and app server builds and deployments to ECS Fargate, and demonstrating observability by instrumenting AWS X-ray. We will be use CloudFormation YAML templates to create the infrastructure.
 
 The web tier features a React.js web application (https://www.crypteye.io/), while the backend is a TypeScript TypeORM based Node.js express application with a MySQL database.
 The web and API repositories are hosted separately in private repositories. However, for demonstration purposes, I will provide the Dockerfile and buildspec.yml files in the `api` and `web` folders without providing the full source code.
@@ -36,7 +36,7 @@ The YAML file for this configuration is located in the `Iac` folder under the na
 
 ## Step 1: Database Setup
 
-We will create a Multi-AZ RDS MySQL DB instance using a DB snapshot, which I previously created from the production database. We will need the ARN of the snapshot. For the database subnet group, we will use the two private DB subnets created in the previous stack. 
+We will create a Multi-AZ RDS MySQL DB instance using a DB snapshot, which I previously created from the production database. We will need the ARN of the snapshot. For the database subnet group, we will use the two private DB subnets created in the previous stack.
 The DB instance DNS name, DB port, and database name will be stored in the System Manager Parameter Store, while the database master username and password will be stored in Secrets Manager. These variables will be injected into the ECS containers at runtime.
 
 The YAML file for this configuration is located in the `Iac` folder under the name `rds.yml`.
@@ -70,7 +70,7 @@ We will:
 - Create an ECS service to deploy the app container in ECS Fargate, using the two private subnets created in the network stack
 
 Ensure you set proper environment variables and secrets in the task definition using SSM Parameter Store and Secrets Manager. We provide secret values such as database username and password in `Secrets:` block and non-secret values such as load balancer url in `Environment:` block.
-These environment variables will be injected into the containers at runtime. 
+These environment variables will be injected into the containers at runtime.
 
 Before executing this stack, make sure to push the app server docker image to aws ECR and provide the image URI in the stack parameter.
 
@@ -91,8 +91,8 @@ Note: The listener rule will have a lower priority than the rule created for the
 
 The YAML file for this configuration is located in the `Iac` folder under the name `web_fargate.yml`.
 
-
 Congratulations! We have successfully deployed:
+
 - An RDS MySQL database
 - A Typescript, TypeORM nodejs app server
 - A react.js web application
@@ -124,6 +124,7 @@ Once the setup is complete, the source code will be built and deployed to ECS as
 
 You can also write a CloudFormation template for the above CodePipeline pipelines to create the pipeline with just a few clicks using CloudFormation.
 
+![Pipeline](/images/pipeline.png)
 ![CodeCommit](/images/codeCommit.png)
 ![CodeBuild](/images/codeBuild.png)
 ![CodePipeline](/images/codePipeline.png)
@@ -139,12 +140,14 @@ Our front end is a React.js single-page application, which means the page metada
 Once the code is instrumented, we need to update our web and API CloudFormation templates to include a sidecar container along with essential web and api containers for the X-Ray daemon to collect tracing data and report to the X-Ray API. By default the X-Ray daemon uses port 2000 UDP for the collection of traces from x-ray-sdk.
 
 To do this, make the following changes in `api_fargate.yml` and `web_fargate.yml` template files:
+
 - Add the X-Ray daemon container to the task definition. We can use the official image provided by AWS.
 - Add a log group to store X-Ray container logs in CloudWatch.
 - Update the container task role and add the following `ManagedPolicyArn` to allow the daemon container to report tracing data to the X-Ray API: "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
 
 Once these changes are made, update the web and API stacks using cloudformation and deploy the latest source code with X-Ray instrumentation using codePipeline. You will be able to see the tracing data in AWS X-Ray and visualize the data using the X-Ray tracing map.
 
+![AWS-X-Ray Architecture](/images/aws-x-ray.png)
 ![X-Ray Trace Map](/images/x-ray-trace-map.png)
 ![X-Ray traces records](/images/x-ray-trace-record.png)
 ![X-Ray traces](/images/x-ray-traces.png)
