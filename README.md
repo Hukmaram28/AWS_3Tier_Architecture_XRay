@@ -2,7 +2,8 @@
 
 ## Overview
 
-This project provides a high level walkthrough of creating a 3-tier web architecture in aws cloud for a distributed microservices architechture, Setting up a CI/CD pipeline for web and app server builds and deployments to ECS Fargate, and demonstrating observability by instrumenting AWS X-ray. We will be use CloudFormation YAML templates to create the infrastructure.
+
+This project provides a high level walkthrough of creating a 3-tier web architecture in aws cloud for a distributed microservices architechture, Setting up a CI/CD pipeline for web and app server builds and deployments to ECS Fargate, and demonstrating observability by instrumenting AWS X-ray. We will use CloudFormation YAML templates to create the infrastructure. 
 
 The web tier features a React.js web application (https://www.crypteye.io/), while the backend is a TypeScript TypeORM based Node.js express application with a MySQL database.
 The web and API repositories are hosted separately in private repositories. However, for demonstration purposes, I will provide the Dockerfile and buildspec.yml files in the `api` and `web` folders without providing the full source code.
